@@ -2,10 +2,12 @@
 
 namespace App\Tests;
 
-use ApiPlatform\Symfony\Bundle\Test\ApiTestCase;
 use Doctrine\Common\DataFixtures\Executor\ORMExecutor;
 use Doctrine\Common\DataFixtures\Loader;
 use Doctrine\Common\DataFixtures\Purger\ORMPurger;
+use JMS\Serializer\Serializer;
+use Symfony\Bundle\FrameworkBundle\KernelBrowser;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\DependencyInjection\ContainerAwareInterface;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
@@ -14,8 +16,10 @@ use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 
-class UserApiTest extends ApiTestCase
+class UserApiTest extends AbstractTest
 {
+
+
     /**
      * @throws \Exception
      */
@@ -63,25 +67,19 @@ class UserApiTest extends ApiTestCase
      */
     protected function setUp(): void
     {
-        $this->loadFixtures($this->getFixtures());
+        parent::setUp();
     }
 
-    final protected function tearDown(): void
-    {
-        parent::tearDown();
-    }
 
     /**
-     * @throws TransportExceptionInterface
      * @throws ServerExceptionInterface
      * @throws RedirectionExceptionInterface
-     * @throws DecodingExceptionInterface
      * @throws ClientExceptionInterface
      * @throws \JsonException
      */
     public function testRegistration(): void
     {
-        $client = static::createClient();
+        $client = self::getClient();
 
         $goodBody = ['username' => 'user123@gmail.com',
             'password' => 'password'];
@@ -96,16 +94,57 @@ class UserApiTest extends ApiTestCase
         $badPasswordBody = ['username' => 'user123@gmail.com',
             'password' => 'pa'];
 
-        $client->request('POST', '/api/v1/register', ['json' => $badJSONBody]);
-        self::assertJsonEquals(['code' => '401', 'errors' => ['JSON' => 'Неверный JSON-формат данных!']]);
+        $client->request(
+            'POST',
+            '/api/v1/register',
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['JSON' => $badJSONBody], JSON_THROW_ON_ERROR)
+        );
+        $json = $client->getResponse()->getContent();
+        self::assertJson($json);
+        $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        self::assertEquals('401', $array['code']);
+        self::assertEquals('Неверный JSON-формат данных!', $array['errors']['JSON']);
 
-        $client->request('POST', '/api/v1/register', ['json' => $badUsernameBody]);
-        self::assertJsonEquals(['code' => '401', 'errors' => ['username' => 'Email заполнен не по формату |почтовыйАдрес@почтовыйДомен.домен| .']]);
+        $client->request(
+            'POST',
+            '/api/v1/register',
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode($badUsernameBody, JSON_THROW_ON_ERROR)
+        );
+        $json = $client->getResponse()->getContent();
+        self::assertJson($json);
+        $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        self::assertEquals('401', $array['code']);
+        self::assertEquals('Email заполнен не по формату |почтовыйАдрес@почтовыйДомен.домен| .', $array['errors']['username']);
 
-        $client->request('POST', '/api/v1/register', ['json' => $badPasswordBody]);
-        self::assertJsonEquals(['code' => '401', 'errors' => ['password' => 'Пароль должен содержать минимум 6 символов.']]);
+        $client->request(
+            'POST',
+            '/api/v1/register',
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode($badPasswordBody, JSON_THROW_ON_ERROR)
+        );
+        $json = $client->getResponse()->getContent();
+        self::assertJson($json);
+        $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        self::assertEquals('401', $array['code']);
+        self::assertEquals('Пароль должен содержать минимум 6 символов.', $array['errors']['password']);
 
-        $json = $client->request('POST', '/api/v1/register', ['json' => $goodBody])->getContent();
+        $client->request(
+            'POST',
+            '/api/v1/register',
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode( $goodBody, JSON_THROW_ON_ERROR)
+        );
+        $json = $client->getResponse()->getContent();
         self::assertJson($json);
         $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
         self::assertArrayHasKey('token', $array);
@@ -114,12 +153,22 @@ class UserApiTest extends ApiTestCase
 
 
         // проверка на уникальность пользователя
-        $client->request('POST', '/api/v1/register', ['json' => $goodBody]);
-        self::assertJsonEquals(['code' => '401', 'errors' => ['unique' => 'Пользователь с такой электронной почтой уже существует!']]);
+        $client->request(
+            'POST',
+            '/api/v1/register',
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode($goodBody, JSON_THROW_ON_ERROR)
+        );
+        $json = $client->getResponse()->getContent();
+        self::assertJson($json);
+        $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        self::assertEquals('401', $array['code']);
+        self::assertEquals('Пользователь с такой электронной почтой уже существует!', $array['errors']['unique']);
     }
 
     /**
-     * @throws TransportExceptionInterface
      * @throws ServerExceptionInterface
      * @throws RedirectionExceptionInterface
      * @throws ClientExceptionInterface
@@ -127,7 +176,7 @@ class UserApiTest extends ApiTestCase
      */
     public function testAuthorization(): void
     {
-        $client = static::createClient();
+        $client = self::$client;
 
         $goodBody = ['username' => 'user@gmail.com',
             'password' => 'password'];
@@ -135,17 +184,33 @@ class UserApiTest extends ApiTestCase
         $badBody = ['username' => 'user123142352@gmail.com',
             'password' => 'password'];
 
-        $client->request('POST', '/api/v1/auth', ['json' => $badBody]);
-        self::assertJsonEquals(['code' => '401', 'message' => 'Invalid credentials.']);
+        $client->request(
+            'POST',
+            '/api/v1/auth',
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode($badBody, JSON_THROW_ON_ERROR)
+        );
+        $json = $client->getResponse()->getContent();
+        $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        self::assertEquals('401', $array['code']);
+        self::assertEquals('Invalid credentials.', $array['message']);
 
-        $json = $client->request('POST', '/api/v1/auth', ['json' => $goodBody])->getContent();
-        self::assertJson($json);
+        $client->request(
+            'POST',
+            '/api/v1/auth',
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode($goodBody, JSON_THROW_ON_ERROR)
+        );
+        $json = $client->getResponse()->getContent();
         $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
         self::assertArrayHasKey('token', $array);
     }
 
     /**
-     * @throws TransportExceptionInterface
      * @throws ServerExceptionInterface
      * @throws RedirectionExceptionInterface
      * @throws ClientExceptionInterface
@@ -153,29 +218,49 @@ class UserApiTest extends ApiTestCase
      */
     public function testCurrentUsers(): void
     {
-        $client = static::createClient();
+        $client = self::$client;
 
         $goodBody = ['username' => 'user@gmail.com',
             'password' => 'password'];
 
-        $json = $client->request('POST', '/api/v1/auth', ['json' => $goodBody])->getContent();
-        self::assertJson($json);
+        $client->request(
+            'POST',
+            '/api/v1/auth',
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode($goodBody, JSON_THROW_ON_ERROR)
+        );
+        $json = $client->getResponse()->getContent();
         $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
         self::assertArrayHasKey('token', $array);
         $token = $array['token'];
 
-        $goodClient = static::createClient([], ['headers' => ['authorization' => ('Bearer '.$token)]]);
-
-        $json = $goodClient->request('GET', '/api/v1/users/current')->getContent();
-        self::assertJson($json);
+        $client->request(
+            'GET',
+            '/api/v1/users/current',
+            [],
+            [],
+            ['HTTP_AUTHORIZATION' => 'Bearer ' . $token, 'CONTENT_TYPE' => 'application/json',]
+        );
+        $json = $client->getResponse()->getContent();
         $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        print_r($array);
         self::assertArrayHasKey('username', $array);
         self::assertArrayHasKey('balance', $array);
         self::assertArrayHasKey('roles', $array);
         self::assertEquals('user@gmail.com', $array['username']);
 
-        $badClient = static::createClient([], ['headers' => ['authorization' => ('Bearer '.$token.'123')]]);
-        $badClient->request('GET', '/api/v1/users/current');
-        self::assertJsonEquals(['code' => '401', 'message' => 'Invalid JWT Token']);
+        $client->request(
+            'GET',
+            '/api/v1/users/current',
+            [],
+            [],
+            ['HTTP_AUTHORIZATION' => 'Bearer ' . $token. '123', 'CONTENT_TYPE' => 'application/json',]
+        );
+        $json = $client->getResponse()->getContent();
+        $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        self::assertEquals('401', $array['code']);
+        self::assertEquals('Invalid JWT Token', $array['message']);
     }
 }
