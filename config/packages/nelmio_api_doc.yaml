@@ -1,0 +1,9 @@
+nelmio_api_doc:
+    documentation:
+        info:
+            title: StudyOn.Billing
+            description: Биллинг проекта StudyOn!
+            version: 1.0.0
+    areas: # to filter documented areas
+        path_patterns:
+            - ^/api/v1(?!/doc$) # Accepts routes under /api except /api/doc
