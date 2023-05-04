@@ -121,8 +121,9 @@ class APIController extends AbstractController
         content: new OA\JsonContent(
             properties: [
                 new OA\Property(property: 'token', type: 'string'),
-                new OA\Property(property: 'ROLES', type: 'array', items: new OA\Items(type: "string"))
-            ],
+                new OA\Property(property: 'ROLES', type: 'array', items: new OA\Items(type: "string")),
+                new OA\Property(property: 'balance', type: 'integer', example: 0)
+],
             type: 'object'
         )
     )]
