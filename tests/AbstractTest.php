@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests;
 
-use App\DataFixtures\AppFixtures;
+use App\DataFixtures\UserFixtures;
 use Doctrine\Common\DataFixtures\Executor\ORMExecutor;
 use Doctrine\Common\DataFixtures\Loader;
 use Doctrine\Common\DataFixtures\Purger\ORMPurger;
@@ -57,7 +57,7 @@ abstract class AbstractTest extends WebTestCase
      */
     protected function getFixtures(): array
     {
-        return [AppFixtures::class];
+        return [UserFixtures::class];
     }
 
     /**

@@ -4,6 +4,8 @@ namespace App\Entity;
 
 use App\DTO\UserDto;
 use App\Repository\UserRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\PasswordHasher\Hasher\PasswordHasherFactory;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
@@ -33,6 +35,14 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column]
     private ?float $balance = 0;
 
+    #[ORM\OneToMany(mappedBy: 'client', targetEntity: Transaction::class, orphanRemoval: true)]
+    private Collection $transactions;
+
+    public function __construct()
+    {
+        $this->transactions = new ArrayCollection();
+    }
+
     public function getId(): ?int
     {
         return $this->id;
@@ -46,7 +56,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public static function formDTO(UserDto $userDto): User
     {
         $user = new self();
-        $factory = New PasswordHasherFactory([
+        $factory = new PasswordHasherFactory([
             'common' => ['algorithm' => 'bcrypt']
         ]);
         $hasher = $factory->getPasswordHasher('common');
@@ -129,6 +139,36 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setBalance(float $balance): self
     {
         $this->balance = $balance;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, Transaction>
+     */
+    public function getTransactions(): Collection
+    {
+        return $this->transactions;
+    }
+
+    public function addTransaction(Transaction $transaction): self
+    {
+        if (!$this->transactions->contains($transaction)) {
+            $this->transactions->add($transaction);
+            $transaction->setClient($this);
+        }
+
+        return $this;
+    }
+
+    public function removeTransaction(Transaction $transaction): self
+    {
+        if ($this->transactions->removeElement($transaction)) {
+            // set the owning side to null (unless already changed)
+            if ($transaction->getClient() === $this) {
+                $transaction->setClient(null);
+            }
+        }
 
         return $this;
     }

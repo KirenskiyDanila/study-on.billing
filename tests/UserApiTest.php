@@ -26,7 +26,7 @@ class UserApiTest extends AbstractTest
     protected function getFixtures(): array
     {
         $userPassHasher = self::getContainer()->get(UserPasswordHasherInterface::class);
-        return [new \App\DataFixtures\AppFixtures($userPassHasher)];
+        return [new \App\DataFixtures\UserFixtures($userPassHasher)];
     }
 
     /**
