@@ -2,6 +2,7 @@
 
 namespace App\Tests;
 
+use App\Service\PaymentService;
 use Doctrine\Common\DataFixtures\Executor\ORMExecutor;
 use Doctrine\Common\DataFixtures\Loader;
 use Doctrine\Common\DataFixtures\Purger\ORMPurger;
@@ -19,14 +20,14 @@ use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 class UserApiTest extends AbstractTest
 {
 
-
     /**
      * @throws \Exception
      */
     protected function getFixtures(): array
     {
         $userPassHasher = self::getContainer()->get(UserPasswordHasherInterface::class);
-        return [new \App\DataFixtures\UserFixtures($userPassHasher)];
+        $paymentService = self::getContainer()->get(PaymentService::class);
+        return [new \App\DataFixtures\UserFixtures($userPassHasher, $paymentService)];
     }
 
     /**
@@ -40,36 +41,10 @@ class UserApiTest extends AbstractTest
     /**
      * @throws \Exception
      */
-    protected function loadFixtures(array $fixtures = []) : void
-    {
-        $loader = new Loader();
-
-        foreach ($fixtures as $fixture) {
-            if (!\is_object($fixture)) {
-                $fixture = new $fixture();
-            }
-
-            if ($fixture instanceof ContainerAwareInterface) {
-                $fixture->setContainer(static::getContainer());
-            }
-
-            $loader->addFixture($fixture);
-        }
-
-        $em = static::getEntityManager();
-        $purger = new ORMPurger($em);
-        $executor = new ORMExecutor($em, $purger);
-        $executor->execute($loader->getFixtures());
-    }
 
     /**
      * @throws \Exception
      */
-    protected function setUp(): void
-    {
-        parent::setUp();
-    }
-
 
     /**
      * @throws ServerExceptionInterface
@@ -106,7 +81,8 @@ class UserApiTest extends AbstractTest
         self::assertJson($json);
         $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
         self::assertEquals('401', $array['code']);
-        self::assertEquals('Неверный JSON-формат данных!', $array['errors']['JSON']);
+        self::assertEquals('Email пуст!', $array['errors']['username']);
+        self::assertEquals('Пароль пуст!', $array['errors']['password']);
 
         $client->request(
             'POST',
@@ -120,7 +96,10 @@ class UserApiTest extends AbstractTest
         self::assertJson($json);
         $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
         self::assertEquals('401', $array['code']);
-        self::assertEquals('Email заполнен не по формату |почтовыйАдрес@почтовыйДомен.домен| .', $array['errors']['username']);
+        self::assertEquals(
+            'Email заполнен не по формату |почтовыйАдрес@почтовыйДомен.домен| .',
+            $array['errors']['username']
+        );
 
         $client->request(
             'POST',
@@ -142,7 +121,7 @@ class UserApiTest extends AbstractTest
             [],
             [],
             ['CONTENT_TYPE' => 'application/json'],
-            json_encode( $goodBody, JSON_THROW_ON_ERROR)
+            json_encode($goodBody, JSON_THROW_ON_ERROR)
         );
         $json = $client->getResponse()->getContent();
         self::assertJson($json);
@@ -211,6 +190,27 @@ class UserApiTest extends AbstractTest
     }
 
     /**
+     * @throws \JsonException
+     */
+    public function getClientTokens($client): array
+    {
+        $credentials = ['username' => 'user@gmail.com',
+            'password' => 'password'];
+
+        $client->request(
+            'POST',
+            '/api/v1/auth',
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode($credentials, JSON_THROW_ON_ERROR)
+        );
+        $json = $client->getResponse()->getContent();
+        $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        return $array;
+    }
+
+    /**
      * @throws ServerExceptionInterface
      * @throws RedirectionExceptionInterface
      * @throws ClientExceptionInterface
@@ -220,21 +220,7 @@ class UserApiTest extends AbstractTest
     {
         $client = self::$client;
 
-        $goodBody = ['username' => 'user@gmail.com',
-            'password' => 'password'];
-
-        $client->request(
-            'POST',
-            '/api/v1/auth',
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
-            json_encode($goodBody, JSON_THROW_ON_ERROR)
-        );
-        $json = $client->getResponse()->getContent();
-        $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
-        self::assertArrayHasKey('token', $array);
-        $token = $array['token'];
+        $token = $this->getClientTokens($client)['token'];
 
         $client->request(
             'GET',
@@ -245,7 +231,6 @@ class UserApiTest extends AbstractTest
         );
         $json = $client->getResponse()->getContent();
         $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
-        print_r($array);
         self::assertArrayHasKey('username', $array);
         self::assertArrayHasKey('balance', $array);
         self::assertArrayHasKey('roles', $array);
@@ -262,5 +247,10 @@ class UserApiTest extends AbstractTest
         $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
         self::assertEquals('401', $array['code']);
         self::assertEquals('Invalid JWT Token', $array['message']);
+    }
+
+    public function testPayCourse() {
+        $client = self::$client;
+
     }
 }

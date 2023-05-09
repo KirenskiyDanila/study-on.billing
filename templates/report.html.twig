@@ -1,0 +1,45 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}
+    Отчет об оплаченных курсах за период {{ monthAgo|date('d.m.Y') }} - {{ now|date('d.m.Y') }}.
+{% endblock %}
+
+{% block body %}
+    <style>
+        .text-center {
+            text-align: center;
+        }
+        .border {
+            border: 1px solid #1f1f1f;
+        }
+    </style>
+    <table class="border">
+        <thead>
+        <tr class="border">
+            <th class="border text-center">Название курса<br></th>
+            <th class="border text-center">Тип курса<br></th>
+            <th class="border text-center">Число аренд/покупок<br></th>
+            <th class="border text-center">Общая сумма<br></th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for cb in coursesBilling %}
+            <tr class="border">
+                <td class="border text-center">{{ cb.title }}</td>
+                <td class="border text-center">
+                    {% if cb.type == 1 %}
+                        {{ 'Аренда' }}
+                    {% else %}
+                        {{ 'Покупка' }}
+                    {% endif %}
+                </td>
+                <td class="border text-center">{{ cb.count }}</td>
+                <td class="border text-center">{{ cb.priceTotal }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <h5>
+        Итого: приобретено {{ totalCount }} курсов на стоимость {{ totalAmount }}.
+    </h5>
+{% endblock %}

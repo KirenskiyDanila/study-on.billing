@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\DTO\UserDto;
 use App\Entity\User;
+use App\Service\ControllerValidator;
 use App\Service\PaymentService;
 use Doctrine\DBAL\Exception;
 use Doctrine\Persistence\ManagerRegistry;
@@ -38,13 +39,15 @@ class UserApiController extends AbstractController
     private RefreshTokenGeneratorInterface $refreshTokenGenerator;
     private RefreshTokenManagerInterface $refreshTokenManager;
     private PaymentService $paymentService;
+    private ControllerValidator $controllerValidator;
     public function __construct(
         ValidatorInterface $validator,
         ManagerRegistry $doctrine,
         JWTTokenManagerInterface $tokenManager,
         RefreshTokenGeneratorInterface $refreshTokenGenerator,
         RefreshTokenManagerInterface $refreshTokenManager,
-        PaymentService $paymentService
+        PaymentService $paymentService,
+        ControllerValidator $controllerValidator
     ) {
         $this->validator = $validator;
         $this->doctrine = $doctrine;
@@ -52,6 +55,7 @@ class UserApiController extends AbstractController
         $this->refreshTokenGenerator = $refreshTokenGenerator;
         $this->refreshTokenManager = $refreshTokenManager;
         $this->paymentService = $paymentService;
+        $this->controllerValidator = $controllerValidator;
     }
 
     #[Route('/auth', name: 'api_auth', methods: ['POST'])]
@@ -191,25 +195,15 @@ class UserApiController extends AbstractController
         $serializer = SerializerBuilder::create()->build();
         $userDto = $serializer->deserialize($request->getContent(), UserDto::class, 'json');
         $errors = $this->validator->validate($userDto);
-        if (count($errors) > 0) {
-            $jsonErrors = [];
-            foreach ($errors as $error) {
-                $jsonErrors[$error->getPropertyPath()] = $error->getMessage();
-            }
-            return new JsonResponse([
-                'code' => 401,
-                'errors' => $jsonErrors
-            ], Response::HTTP_UNAUTHORIZED);
+        $dataErrorResponse = $this->controllerValidator->validateDto($errors);
+        if ($dataErrorResponse !== null) {
+            return $dataErrorResponse;
         }
         $em = $this->doctrine->getManager();
         $user = $em->getRepository(User::class)->findOneBy(['email' => $userDto->username]);
-        if ($user !== null) {
-            return new JsonResponse([
-                'code' => 401,
-                'errors' => [
-                    "unique" => "Пользователь с такой электронной почтой уже существует!"
-                ]
-            ], Response::HTTP_UNAUTHORIZED);
+        $uniqueErrorResponse = $this->controllerValidator->validateRegistrationUnique($user);
+        if ($uniqueErrorResponse !== null) {
+            return $uniqueErrorResponse;
         }
         $user = User::formDTO($userDto);
         $this->paymentService->deposit($user, $_ENV['CLIENT_MONEY']);
@@ -345,13 +339,11 @@ class UserApiController extends AbstractController
         name: "User"
     )]
     #[Security(name: "Bearer")]
-    public function currentUser(): JsonResponse
+    public function getCurrentUser(): JsonResponse
     {
-        if (!$this->getUser()) {
-            return new JsonResponse([
-                'code' => 401,
-                "message" => "JWT Token не найден"
-            ], Response::HTTP_OK);
+        $errorResponse = $this->controllerValidator->validateGetCurrentUser($this->getUser());
+        if ($errorResponse !== null) {
+            return $errorResponse;
         }
 
         return new JsonResponse([

@@ -5,7 +5,6 @@ namespace App\DTO;
 use Symfony\Component\Validator\Constraints as Assert;
 use JMS\Serializer\Annotation as Serializer;
 
-
 class UserDto
 {
     #[Serializer\Type('string')]

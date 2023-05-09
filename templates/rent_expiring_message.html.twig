@@ -1,0 +1,10 @@
+{% extends 'base.html.twig' %}
+{% block body %}
+<body>
+Уважаемый клиент! У вас есть курсы, срок аренды которых подходит к концу:
+{% for transaction in transactions %}
+    <br>
+    {{ transaction.course.title }} действует до {{ transaction.expiresAt|date("d.m.Y H:i") }}
+{% endfor %}
+</body>
+{% endblock %}

@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Repository\CourseRepository;
 use App\Repository\TransactionRepository;
+use App\Service\ControllerValidator;
 use Doctrine\Persistence\ManagerRegistry;
 use Nelmio\ApiDocBundle\Annotation\Security;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -18,9 +19,11 @@ class TransactionController extends AbstractController
 {
 
     private TransactionRepository $transactionRepository;
-    public function __construct(TransactionRepository $transactionRepository)
+    private ControllerValidator $controllerValidator;
+    public function __construct(TransactionRepository $transactionRepository, ControllerValidator $controllerValidator)
     {
         $this->transactionRepository = $transactionRepository;
+        $this->controllerValidator = $controllerValidator;
     }
 
     #[Route('/transactions', name: 'api_transactions', methods: ['GET'])]
@@ -108,12 +111,7 @@ class TransactionController extends AbstractController
     public function getTransactions(Request $request): JsonResponse
     {
         $user = $this->getUser();
-        if ($user === null) {
-            return new JsonResponse([
-                'code' => 401,
-                'message' => 'Требуется токен авторизации!'
-            ], Response::HTTP_UNAUTHORIZED);
-        }
+        $this->controllerValidator->validateGetTransactions($user);
         if ($request->query->get("type", null) === 'payment') {
             $type = 0;
         } elseif ($request->query->get("type", null) === 'deposit') {

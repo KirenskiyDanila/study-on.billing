@@ -40,13 +40,17 @@ class CourseAndTransactionFixtures extends Fixture implements DependentFixtureIn
         $course1 = new Course();
         $course1->setType(0);
         $course1->setCode('course-1');
+        $course1->setTitle('ИТ-инженер');
+
 
         $course2 = new Course();
+        $course2->setTitle('Профессия Графический дизайнер');
         $course2->setType(1);
         $course2->setCode('course-2');
         $course2->setPrice(2000);
 
         $course3 = new Course();
+        $course3->setTitle('Профессия Бухгалтер');
         $course3->setType(2);
         $course3->setCode('course-3');
         $course3->setPrice(25000);
@@ -58,16 +62,27 @@ class CourseAndTransactionFixtures extends Fixture implements DependentFixtureIn
         $manager->flush();
 
         $admin = $manager->getRepository(User::class)->findOneBy(['email' => 'admin@gmail.com']);
-        $user = $manager->getRepository(User::class)->findOneBy(['email' => 'user@gmail.com']);
 
-        $currentDate = new DateTimeImmutable('now');
+        $year = 2023;
+        $month = 2;
+        $day = 16;
+        $hour = 7;
+        $minute = 24;
+        $second = 10;
+
+        $oldDate =(new DateTimeImmutable)
+            ->setTime($hour, $minute, $second)
+            ->setDate($year, $month, $day);
 
         $transaction1 = new Transaction();
-        $transaction1->setCourse($course1);
-        $transaction1->setClient($user);
+        $transaction1->setCourse($course2);
+        $transaction1->setClient($admin);
         $transaction1->setType(0);
-        $transaction1->setAmount(0);
-        $transaction1->setCreatedAt($currentDate->add(new DateInterval('P2D')));
+        $transaction1->setAmount($course2->getPrice());
+        $transaction1->setCreatedAt($oldDate);
+        $transaction1->setExpiresAt($oldDate->add(new DateInterval('P8D')));
+
+        $currentDate = new DateTimeImmutable('now');
 
         $transaction2 = new Transaction();
         $transaction2->setCourse($course2);
@@ -90,30 +105,10 @@ class CourseAndTransactionFixtures extends Fixture implements DependentFixtureIn
         $transaction4->setAmount(50000);
         $transaction4->setCreatedAt($currentDate);
 
-        $year = 2023;
-        $month = 2;
-        $day = 16;
-        $hour = 7;
-        $minute = 24;
-        $second = 10;
-
-        $oldDate =(new DateTimeImmutable)
-            ->setTime($hour, $minute, $second)
-            ->setDate($year, $month, $day);
-
-        $transaction5 = new Transaction();
-        $transaction5->setCourse($course2);
-        $transaction5->setClient($admin);
-        $transaction5->setType(0);
-        $transaction5->setAmount($course2->getPrice());
-        $transaction5->setCreatedAt($oldDate);
-        $transaction5->setExpiresAt($oldDate->add(new DateInterval('P8D')));
-
         $manager->persist($transaction1);
         $manager->persist($transaction2);
         $manager->persist($transaction3);
         $manager->persist($transaction4);
-        $manager->persist($transaction5);
 
         $manager->flush();
     }
