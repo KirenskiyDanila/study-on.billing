@@ -11,27 +11,14 @@ use DateTimeImmutable;
 use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Common\DataFixtures\DependentFixtureInterface;
 use Doctrine\Common\DataFixtures\FixtureInterface;
+use Doctrine\Common\DataFixtures\OrderedFixtureInterface;
 use Doctrine\Persistence\ObjectManager;
 
-class CourseAndTransactionFixtures extends Fixture implements DependentFixtureInterface
+class CourseAndTransactionFixtures extends Fixture implements OrderedFixtureInterface
 {
-
-    /**
-     * @return list<class-string<FixtureInterface>>
-     */
-    public function getDependencies(): array
+    public function getOrder(): int
     {
-        return [UserFixtures::class];
-    }
-
-    private UserRepository $userRepository;
-
-    /**
-     * @param UserRepository $userRepository
-     */
-    public function __construct(UserRepository $userRepository)
-    {
-        $this->userRepository = $userRepository;
+        return 2;
     }
 
     public function load(ObjectManager $manager): void
@@ -47,13 +34,13 @@ class CourseAndTransactionFixtures extends Fixture implements DependentFixtureIn
         $course2->setTitle('Профессия Графический дизайнер');
         $course2->setType(1);
         $course2->setCode('course-2');
-        $course2->setPrice(2000);
+        $course2->setPrice(1999.90);
 
         $course3 = new Course();
         $course3->setTitle('Профессия Бухгалтер');
         $course3->setType(2);
         $course3->setCode('course-3');
-        $course3->setPrice(25000);
+        $course3->setPrice(24999.90);
 
         $manager->persist($course1);
         $manager->persist($course2);
@@ -80,7 +67,7 @@ class CourseAndTransactionFixtures extends Fixture implements DependentFixtureIn
         $transaction1->setType(0);
         $transaction1->setAmount($course2->getPrice());
         $transaction1->setCreatedAt($oldDate);
-        $transaction1->setExpiresAt($oldDate->add(new DateInterval('P8D')));
+        $transaction1->setExpiresAt($oldDate->add(new DateInterval('P7D')));
 
         $currentDate = new DateTimeImmutable('now');
 

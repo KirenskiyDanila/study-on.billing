@@ -53,7 +53,7 @@ class PaymentService
             $json['success'] = true;
             $json['course_type'] = $course->getStringType();
             if ($course->getStringType() === 'rent') {
-                $json['expires_at'] = $transaction->getExpiresAt();
+                $json['expires_at'] = date_format($transaction->getExpiresAt(), "Y-m-dTH:i:s");
             }
             return $json;
         } catch (ORMException|Exception $e) {

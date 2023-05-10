@@ -31,22 +31,6 @@ class UserApiTest extends AbstractTest
     }
 
     /**
-     * @throws \Exception
-     */
-    protected static function getEntityManager()
-    {
-        return static::getContainer()->get('doctrine')->getManager();
-    }
-
-    /**
-     * @throws \Exception
-     */
-
-    /**
-     * @throws \Exception
-     */
-
-    /**
      * @throws ServerExceptionInterface
      * @throws RedirectionExceptionInterface
      * @throws ClientExceptionInterface
@@ -75,7 +59,7 @@ class UserApiTest extends AbstractTest
             [],
             [],
             ['CONTENT_TYPE' => 'application/json'],
-            json_encode(['JSON' => $badJSONBody], JSON_THROW_ON_ERROR)
+            json_encode($badJSONBody, JSON_THROW_ON_ERROR)
         );
         $json = $client->getResponse()->getContent();
         self::assertJson($json);
@@ -192,7 +176,7 @@ class UserApiTest extends AbstractTest
     /**
      * @throws \JsonException
      */
-    public function getClientTokens($client): array
+    public function getUserTokens($client): array
     {
         $credentials = ['username' => 'user@gmail.com',
             'password' => 'password'];
@@ -206,8 +190,7 @@ class UserApiTest extends AbstractTest
             json_encode($credentials, JSON_THROW_ON_ERROR)
         );
         $json = $client->getResponse()->getContent();
-        $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
-        return $array;
+        return json_decode($json, true, 512, JSON_THROW_ON_ERROR);
     }
 
     /**
@@ -220,7 +203,39 @@ class UserApiTest extends AbstractTest
     {
         $client = self::$client;
 
-        $token = $this->getClientTokens($client)['token'];
+        $token = $this->getUserTokens($client)['token'];
+
+        $this->assertUserTokenSuccess($client, $token);
+
+        $this->assertUserTokenFail($client, $token . '123');
+    }
+
+    /**
+     * @throws \JsonException
+     */
+    private function assertUserTokenSuccess($client, $token): void
+    {
+        $client->request(
+            'GET',
+            '/api/v1/users/current',
+            [],
+            [],
+            ['HTTP_AUTHORIZATION' => 'Bearer ' . $token, 'CONTENT_TYPE' => 'application/json',]
+        );
+
+        $json = $client->getResponse()->getContent();
+        $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        self::assertArrayHasKey('username', $array);
+        self::assertArrayHasKey('balance', $array);
+        self::assertArrayHasKey('roles', $array);
+        self::assertEquals('user@gmail.com', $array['username']);
+    }
+
+    /**
+     * @throws \JsonException
+     */
+    private function assertUserTokenFail($client, $token) : void
+    {
 
         $client->request(
             'GET',
@@ -231,26 +246,54 @@ class UserApiTest extends AbstractTest
         );
         $json = $client->getResponse()->getContent();
         $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
-        self::assertArrayHasKey('username', $array);
-        self::assertArrayHasKey('balance', $array);
-        self::assertArrayHasKey('roles', $array);
-        self::assertEquals('user@gmail.com', $array['username']);
-
-        $client->request(
-            'GET',
-            '/api/v1/users/current',
-            [],
-            [],
-            ['HTTP_AUTHORIZATION' => 'Bearer ' . $token. '123', 'CONTENT_TYPE' => 'application/json',]
-        );
-        $json = $client->getResponse()->getContent();
-        $array = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
         self::assertEquals('401', $array['code']);
         self::assertEquals('Invalid JWT Token', $array['message']);
     }
 
-    public function testPayCourse() {
+    /**
+     * @throws \JsonException
+     */
+    public function testRefresh(): void
+    {
         $client = self::$client;
 
+        $tokens = $this->getUserTokens($client);
+        $oldToken = $tokens['token'];
+
+        $this->assertUserTokenSuccess($client, $oldToken);
+
+        sleep(5);
+
+        $client->request(
+            'POST',
+            '/api/v1/token/refresh',
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(["refresh_token" => $tokens['refresh_token']], JSON_THROW_ON_ERROR)
+        );
+
+        $json = $client->getResponse()->getContent();
+        $tokens = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        $newToken = $tokens['token'];
+
+        self::assertNotSame($newToken, $oldToken);
+
+        $this->assertUserTokenSuccess($client, $oldToken);
+        $this->assertUserTokenSuccess($client, $newToken);
+
+        $client->request(
+            'POST',
+            '/api/v1/token/refresh',
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(["refresh_token" => $tokens['refresh_token'] . '123'], JSON_THROW_ON_ERROR)
+        );
+
+        $json = $client->getResponse()->getContent();
+        $errors = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        self::assertEquals('401', $errors['code']);
+        self::assertEquals('JWT Refresh Token Not Found', $errors['message']);
     }
 }

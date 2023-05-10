@@ -4,15 +4,20 @@ declare(strict_types=1);
 
 namespace App\Tests;
 
+use App\DataFixtures\CourseAndTransactionFixtures;
 use App\DataFixtures\UserFixtures;
+use App\Repository\UserRepository;
+use App\Service\PaymentService;
 use Doctrine\Common\DataFixtures\Executor\ORMExecutor;
 use Doctrine\Common\DataFixtures\Loader;
 use Doctrine\Common\DataFixtures\Purger\ORMPurger;
+use Doctrine\ORM\EntityManager;
 use Exception;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\DependencyInjection\ContainerAwareInterface;
 use Symfony\Component\DomCrawler\Crawler;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 abstract class AbstractTest extends WebTestCase
 {
@@ -31,6 +36,9 @@ abstract class AbstractTest extends WebTestCase
         return static::$client;
     }
 
+    /**
+     * @throws Exception
+     */
     protected function setUp(): void
     {
         static::getClient();
@@ -47,21 +55,27 @@ abstract class AbstractTest extends WebTestCase
      * Shortcut
      * @throws Exception
      */
-    protected static function getEntityManager()
+    protected static function getEntityManager(): EntityManager
     {
         return static::getContainer()->get('doctrine')->getManager();
     }
 
     /**
      * List of fixtures for certain test
+     * @throws Exception
      */
     protected function getFixtures(): array
     {
-        return [UserFixtures::class];
+        $userPassHasher = self::getContainer()->get(UserPasswordHasherInterface::class);
+        $paymentService = self::getContainer()->get(PaymentService::class);
+        $userRepository = self::getContainer()->get(UserRepository::class);
+        return [new UserFixtures($userPassHasher, $paymentService),
+            new CourseAndTransactionFixtures($userRepository)];
     }
 
     /**
      * Load fixtures before test
+     * @throws Exception
      */
     protected function loadFixtures(array $fixtures = []) : void
     {

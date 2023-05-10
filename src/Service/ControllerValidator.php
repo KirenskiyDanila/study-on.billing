@@ -6,6 +6,7 @@ use App\DTO\CourseDto;
 use App\Entity\Course;
 use App\Entity\User;
 use App\Repository\CourseRepository;
+use App\Repository\TransactionRepository;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Validator\ConstraintViolationListInterface;
@@ -13,9 +14,11 @@ use Symfony\Component\Validator\ConstraintViolationListInterface;
 class ControllerValidator
 {
     private CourseRepository $courseRepository;
-    public function __construct(CourseRepository $courseRepository)
+    private TransactionRepository $transactionRepository;
+    public function __construct(CourseRepository $courseRepository, TransactionRepository $transactionRepository)
     {
         $this->courseRepository = $courseRepository;
+        $this->transactionRepository = $transactionRepository;
     }
 
     public function validatePayCourse(User $user = null, Course $course = null): ?JsonResponse
@@ -30,19 +33,31 @@ class ControllerValidator
             return new JsonResponse([
                 'code' => 401,
                 'message' => 'Не найден курс с данным кодом.'
-            ], Response::HTTP_OK);
+            ], Response::HTTP_UNAUTHORIZED);
         }
         if ($course->getStringType() === 'free') {
             return new JsonResponse([
                 'code' => 406,
                 'message' => 'Данный курс бесплатный.'
-            ], Response::HTTP_OK);
+            ], Response::HTTP_NOT_ACCEPTABLE);
+        }
+        $transactions = $this->transactionRepository->findWithFilter(
+            $user,
+            null,
+            $course->getCode(),
+            true
+        );
+        if (count($transactions) !== 0) {
+            return new JsonResponse([
+                'code' => 406,
+                'message' => 'Вы уже владете доступом к данному курсу.'
+            ], Response::HTTP_NOT_ACCEPTABLE);
         }
         if ($course->getType() !== 0 && $user->getBalance() < $course->getPrice()) {
             return new JsonResponse([
                 'code' => 406,
                 'message' => 'На вашем счету недостаточно средств.'
-            ], Response::HTTP_OK);
+            ], Response::HTTP_NOT_ACCEPTABLE);
         }
         return null;
     }
@@ -105,7 +120,7 @@ class ControllerValidator
             return new JsonResponse([
                 'code' => 401,
                 "message" => "JWT Token не найден"
-            ], Response::HTTP_OK);
+            ], Response::HTTP_UNAUTHORIZED);
         }
         return null;
     }

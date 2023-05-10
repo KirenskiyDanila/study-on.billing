@@ -12,6 +12,7 @@ class CourseDto
     public ?string $code = null;
 
     #[Serializer\Type('string')]
+    #[Assert\NotBlank(message: 'Поле не должно быть пустым!')]
     #[Assert\Choice(choices: ['buy', 'rent', 'free'], message: 'Выберите существующий тип оплаты!')]
     public ?string $type = null;
     #[Serializer\Type('float')]
