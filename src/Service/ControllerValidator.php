@@ -53,7 +53,7 @@ class ControllerValidator
                 'message' => 'Вы уже владете доступом к данному курсу.'
             ], Response::HTTP_NOT_ACCEPTABLE);
         }
-        if ($course->getType() !== 0 && $user->getBalance() < $course->getPrice()) {
+        if ($user->getBalance() < $course->getPrice()) {
             return new JsonResponse([
                 'code' => 406,
                 'message' => 'На вашем счету недостаточно средств.'
