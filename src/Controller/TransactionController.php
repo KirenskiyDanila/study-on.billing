@@ -4,7 +4,6 @@ namespace App\Controller;
 
 use App\Repository\CourseRepository;
 use App\Repository\TransactionRepository;
-use App\Service\ControllerValidator;
 use Doctrine\Persistence\ManagerRegistry;
 use Nelmio\ApiDocBundle\Annotation\Security;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -13,17 +12,18 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 use OpenApi\Attributes as OA;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/api/v1')]
 class TransactionController extends AbstractController
 {
 
+    private TranslatorInterface $translator;
     private TransactionRepository $transactionRepository;
-    private ControllerValidator $controllerValidator;
-    public function __construct(TransactionRepository $transactionRepository, ControllerValidator $controllerValidator)
+    public function __construct(TransactionRepository $transactionRepository, TranslatorInterface $translator)
     {
         $this->transactionRepository = $transactionRepository;
-        $this->controllerValidator = $controllerValidator;
+        $this->translator = $translator;
     }
 
     #[Route('/transactions', name: 'api_transactions', methods: ['GET'])]
@@ -111,7 +111,16 @@ class TransactionController extends AbstractController
     public function getTransactions(Request $request): JsonResponse
     {
         $user = $this->getUser();
-        $this->controllerValidator->validateGetTransactions($user);
+        if ($user === null) {
+            return new JsonResponse([
+                'code' => 401,
+                'message' => $this->translator->trans(
+                    'authTokenError',
+                    [],
+                    'messages'
+                )
+            ], Response::HTTP_UNAUTHORIZED);
+        }
         if ($request->query->get("type", null) === 'payment') {
             $type = 0;
         } elseif ($request->query->get("type", null) === 'deposit') {

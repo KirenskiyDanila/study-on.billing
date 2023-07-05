@@ -14,6 +14,7 @@ use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Address;
 use Symfony\Component\Mime\Email;
+use Symfony\Contracts\Translation\TranslatorInterface;
 use Twig\Error\LoaderError;
 use Twig\Error\RuntimeError;
 use Twig\Error\SyntaxError;
@@ -25,18 +26,21 @@ class ReportCommand extends Command
     private TransactionRepository $transactionRepository;
     private CourseRepository $courseRepository;
     private MailerInterface $mailer;
+    private TranslatorInterface $translator;
 
     public function __construct(
         Twig $twig,
         CourseRepository $courseRepository,
         TransactionRepository $transactionRepository,
         MailerInterface $mailer,
+        TranslatorInterface $translator,
         string $name = null
     ) {
         $this->twig = $twig;
         $this->courseRepository = $courseRepository;
         $this->transactionRepository = $transactionRepository;
         $this->mailer = $mailer;
+        $this->translator = $translator;
         parent::__construct($name);
     }
 
@@ -88,11 +92,19 @@ class ReportCommand extends Command
 
             $this->mailer->send($email);
 
-            $output->writeln('Отчет успешно отправлен менеджеру!');
+            $output->writeln($this->translator->trans(
+                'command.report.success',
+                [],
+                'messages'
+            ));
         } catch (TransportExceptionInterface $e) {
             $output->writeln($e->getMessage());
             $output->writeln(
-                'Ошибка при формировании и отправке отчета .'
+                $this->translator->trans(
+                    'command.report.error',
+                    [],
+                    'messages'
+                )
             );
 
             return Command::FAILURE;

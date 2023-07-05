@@ -6,7 +6,6 @@ use App\DTO\CourseDto;
 use App\Entity\Course;
 use App\Entity\Transaction;
 use App\Repository\CourseRepository;
-use App\Service\ControllerValidator;
 use App\Service\PaymentService;
 use DateInterval;
 use DateTime;
@@ -25,28 +24,29 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 use OpenApi\Attributes as OA;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 #[Route('/api/v1')]
 class CourseApiController extends AbstractController
 {
     private CourseRepository $courseRepository;
     private PaymentService $paymentService;
-    private ControllerValidator $controllerValidator;
     private ValidatorInterface $validator;
     private ManagerRegistry $doctrine;
+    private TranslatorInterface $translator;
 
     public function __construct(
         CourseRepository $courseRepository,
         PaymentService $paymentService,
-        ControllerValidator $controllerValidator,
         ValidatorInterface $validator,
-        ManagerRegistry $doctrine
+        ManagerRegistry $doctrine,
+        TranslatorInterface $translator
     ) {
         $this->courseRepository = $courseRepository;
         $this->paymentService = $paymentService;
-        $this->controllerValidator = $controllerValidator;
         $this->validator = $validator;
         $this->doctrine = $doctrine;
+        $this->translator = $translator;
     }
 
     #[Route('/courses', name: 'api_courses', methods: ['GET'])]
@@ -168,9 +168,15 @@ class CourseApiController extends AbstractController
     public function getCourse(string $code): JsonResponse
     {
         $course = $this->courseRepository->findOneBy(['code' => $code]);
-        $errorResponse = $this->controllerValidator->validateGetCourse($course);
-        if ($errorResponse !== null) {
-            return $errorResponse;
+        if ($course === null) {
+            return new JsonResponse([
+                'code' => 401,
+                'message' => $this->translator->trans(
+                    'controller.course.errors.notFound',
+                    [],
+                    'messages'
+                )
+            ], Response::HTTP_UNAUTHORIZED);
         }
         $jsonCourse['code'] = $course->getCode();
         $jsonCourse['type'] = $course->getStringType();
@@ -254,9 +260,61 @@ class CourseApiController extends AbstractController
     {
         $user = $this->getUser();
         $course = $this->courseRepository->findOneBy(['code' => $code]);
-        $errorResponse = $this->controllerValidator->validatePayCourse($user, $course);
-        if ($errorResponse !== null) {
-            return $errorResponse;
+        if ($user === null) {
+            return new JsonResponse([
+                'code' => 401,
+                'message' => $this->translator->trans(
+                    'authTokenError',
+                    [],
+                    'messages'
+                )
+            ], Response::HTTP_UNAUTHORIZED);
+        }
+        if ($course === null) {
+            return new JsonResponse([
+                'code' => 401,
+                'message' => $this->translator->trans(
+                    'controller.course.errors.notFound',
+                    [],
+                    'messages'
+                )
+            ], Response::HTTP_UNAUTHORIZED);
+        }
+        if ($course->getStringType() === 'free') {
+            return new JsonResponse([
+                'code' => 406,
+                'message' => $this->translator->trans(
+                    'controller.course.errors.free',
+                    [],
+                    'messages'
+                )
+            ], Response::HTTP_NOT_ACCEPTABLE);
+        }
+        $transactions = $this->doctrine->getRepository(Transaction::class)->findWithFilter(
+            $user,
+            null,
+            $course->getCode(),
+            true
+        );
+        if (count($transactions) !== 0) {
+            return new JsonResponse([
+                'code' => 406,
+                'message' => $this->translator->trans(
+                    'controller.course.errors.alreadyOwned',
+                    [],
+                    'messages'
+                )
+            ], Response::HTTP_NOT_ACCEPTABLE);
+        }
+        if ($user->getBalance() < $course->getPrice()) {
+            return new JsonResponse([
+                'code' => 406,
+                'message' => $this->translator->trans(
+                    'controller.course.errors.balance',
+                    [],
+                    'messages'
+                )
+            ], Response::HTTP_NOT_ACCEPTABLE);
         }
         $json = $this->paymentService->payment($user, $course);
 
@@ -327,16 +385,62 @@ class CourseApiController extends AbstractController
     #[Security(name: "Bearer")]
     public function addCourse(Request $request): JsonResponse
     {
-        $adminErrorResponse = $this->controllerValidator->validateAdmin($this->getUser());
-        if ($adminErrorResponse !== null) {
-            return $adminErrorResponse;
+        $user = $this->getUser();
+        if ($user === null) {
+            return new JsonResponse([
+                'code' => 401,
+                'message' => $this->translator->trans(
+                    'authTokenError',
+                    [],
+                    'messages'
+                )
+            ], Response::HTTP_UNAUTHORIZED);
+        }
+        if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
+            return new JsonResponse([
+                'code' => 401,
+                'message' => $this->translator->trans(
+                    'roleError',
+                    [],
+                    'messages'
+                )
+            ], Response::HTTP_UNAUTHORIZED);
         }
         $serializer = SerializerBuilder::create()->build();
         $courseDto = $serializer->deserialize($request->getContent(), CourseDto::class, 'json');
         $errors = $this->validator->validate($courseDto);
-        $validationResponse = $this->controllerValidator->validateCourse($errors, $courseDto);
-        if ($validationResponse !== null) {
-            return $validationResponse;
+        if (count($errors) > 0) {
+            $jsonErrors = [];
+            foreach ($errors as $error) {
+                $jsonErrors[$error->getPropertyPath()] = $error->getMessage();
+            }
+            return new JsonResponse([
+                'code' => 401,
+                'errors' => $jsonErrors
+            ], Response::HTTP_UNAUTHORIZED);
+        }
+        if (($courseDto->type === 'rent' || $courseDto->type === 'buy') && $courseDto->price === null) {
+            return new JsonResponse([
+                'code' => 401,
+                'message' => $this->translator->trans(
+                    'controller.course.errors.type',
+                    [],
+                    'messages'
+                )
+            ], Response::HTTP_UNAUTHORIZED);
+        }
+        $duplicateCourse = $this->courseRepository->findOneBy(['code' => $courseDto->code]);
+        if ($duplicateCourse !== null) {
+            return new JsonResponse([
+                'code' => 401,
+                'errors' => [
+                    "unique" => $this->translator->trans(
+                        'controller.course.errors.unique',
+                        [],
+                        'messages'
+                    )
+                ]
+            ], Response::HTTP_UNAUTHORIZED);
         }
 
         $course = Course::formDto($courseDto);
@@ -413,21 +517,73 @@ class CourseApiController extends AbstractController
     #[Security(name: "Bearer")]
     public function editCourse(Request $request, string $code): JsonResponse
     {
-        $adminErrorResponse = $this->controllerValidator->validateAdmin($this->getUser());
-        if ($adminErrorResponse !== null) {
-            return $adminErrorResponse;
+        $user = $this->getUser();
+        if ($user === null) {
+            return new JsonResponse([
+                'code' => 401,
+                'message' => $this->translator->trans(
+                    'authTokenError',
+                    [],
+                    'messages'
+                )
+            ], Response::HTTP_UNAUTHORIZED);
+        }
+        if (!in_array('ROLE_SUPER_ADMIN', $user->getRoles(), true)) {
+            return new JsonResponse([
+                'code' => 401,
+                'message' => $this->translator->trans(
+                    'roleError',
+                    [],
+                    'messages'
+                )
+            ], Response::HTTP_UNAUTHORIZED);
         }
         $course = $this->courseRepository->findOneBy(['code' => $code]);
-        $courseErrorResponse = $this->controllerValidator->validateGetCourse($course);
-        if ($courseErrorResponse !== null) {
-            return $courseErrorResponse;
+        if ($course === null) {
+            return new JsonResponse([
+                'code' => 401,
+                'message' => $this->translator->trans(
+                    'controller.course.errors.notFound',
+                    [],
+                    'messages'
+                )
+            ], Response::HTTP_UNAUTHORIZED);
         }
         $serializer = SerializerBuilder::create()->build();
         $courseDto = $serializer->deserialize($request->getContent(), CourseDto::class, 'json');
         $errors = $this->validator->validate($courseDto);
-        $validationResponse = $this->controllerValidator->validateCourse($errors, $courseDto, $course);
-        if ($validationResponse !== null) {
-            return $validationResponse;
+        if (count($errors) > 0) {
+            $jsonErrors = [];
+            foreach ($errors as $error) {
+                $jsonErrors[$error->getPropertyPath()] = $error->getMessage();
+            }
+            return new JsonResponse([
+                'code' => 401,
+                'errors' => $jsonErrors
+            ], Response::HTTP_UNAUTHORIZED);
+        }
+        if (($courseDto->type === 'rent' || $courseDto->type === 'buy') && $courseDto->price === null) {
+            return new JsonResponse([
+                'code' => 401,
+                'message' => $this->translator->trans(
+                    'controller.course.errors.type',
+                    [],
+                    'messages'
+                )
+            ], Response::HTTP_UNAUTHORIZED);
+        }
+        $duplicateCourse = $this->courseRepository->findOneBy(['code' => $courseDto->code]);
+        if (($duplicateCourse !== null) && $duplicateCourse !== $course) {
+            return new JsonResponse([
+                'code' => 401,
+                'errors' => [
+                    "unique" => $this->translator->trans(
+                        'controller.course.errors.unique',
+                        [],
+                        'messages'
+                    )
+                ]
+            ], Response::HTTP_UNAUTHORIZED);
         }
         $course = Course::formDto($courseDto, $course);
         $em = $this->doctrine->getManager();

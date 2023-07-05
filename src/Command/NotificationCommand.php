@@ -13,6 +13,7 @@ use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Address;
 use Symfony\Component\Mime\Email;
+use Symfony\Contracts\Translation\TranslatorInterface;
 use Twig\Error\LoaderError;
 use Twig\Error\RuntimeError;
 use Twig\Error\SyntaxError;
@@ -23,6 +24,7 @@ class NotificationCommand extends Command
     private Twig $twig;
     private TransactionRepository $transactionRepository;
     private UserRepository $userRepository;
+    private TranslatorInterface $translator;
 
     private MailerInterface $mailer;
 
@@ -31,6 +33,7 @@ class NotificationCommand extends Command
         TransactionRepository $transactionRepository,
         UserRepository $userRepository,
         MailerInterface $mailer,
+        TranslatorInterface $translator,
         string $name = null
     ) {
         $this->twig = $twig;
@@ -38,6 +41,7 @@ class NotificationCommand extends Command
         $this->userRepository = $userRepository;
         $this->mailer = $mailer;
         parent::__construct($name);
+        $this->translator = $translator;
     }
 
     /**
@@ -68,13 +72,20 @@ class NotificationCommand extends Command
 
                     $this->mailer->send($email);
 
-                    $output->writeln('Отчет успешно отправлен пользователю ' . $user->getEmail() . '!');
+                    $output->writeln($this->translator->trans(
+                        'command.notification.success',
+                        [],
+                        'messages'
+                    ) . $user->getEmail() . '!');
                 } catch (TransportExceptionInterface $e) {
                     $output->writeln($e->getMessage());
                     $output->writeln(
-                        'Ошибка при формировании и отправке отчета пользователю ' . $user->getEmail() . '.'
+                        $this->translator->trans(
+                            'command.notification.error',
+                            [],
+                            'messages'
+                        ) . $user->getEmail() . '.'
                     );
-
                     return Command::FAILURE;
                 }
             }
